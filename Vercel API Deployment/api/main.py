@@ -64,6 +64,7 @@ ALGORITHM = "HS256"
 # Pydantic basemodel.
 class UserCreate(BaseModel):
     username: str
+    email: str
     password: str
 
 # Helper function to create an access token.
@@ -95,16 +96,34 @@ def get_user_by_username(username: str):
         return response.data[0]
     return None
 
+# Helper function to find a user by email.
+def get_user_by_email(email: str):
+    response = supabase.table("users").select("*").eq("email", email).execute()
+    if response.data:
+        return response.data[0]
+    return None
+
+# Helper function to find a user by email or username.
+def get_user_by_email_or_username(identifier: str):
+    response = supabase.table("users").select("*").or_(f"username.eq.{identifier},email.eq.{identifier}").execute()
+    if response.data:
+        return response.data[0]
+    return None
+
 # Auth endpoint for registering a new user.
 @app.post("/auth/register", tags=["Authentication"])
 def register_user(user: UserCreate):
-    # Check if username is already taken.
-    if get_user_by_username(user.username):
-        raise HTTPException(status_code=400, detail="Username already registered")
+    # Check if username or email is already taken.
+    if get_user_by_username(user.username) or get_user_by_email(user.email):
+        raise HTTPException(status_code=400, detail="Username or email already registered")
     
     # Hash the password and save the user in Supabase.
     hashed_password = pwd_context.hash(user.password)
-    response = supabase.table("users").insert({"username": user.username, "hashed_password": hashed_password}).execute()
+    response = supabase.table("users").insert({
+        "username": user.username,
+        "email": user.email,
+        "hashed_password": hashed_password
+    }).execute()
     if not response:
         raise HTTPException(status_code=500, detail="Failed to register user")
     return {"message": "User registered successfully"}
@@ -112,11 +131,12 @@ def register_user(user: UserCreate):
 # Auth endpoint for logging in an existing user.
 @app.post("/auth/login", tags=["Authentication"])
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = get_user_by_username(form_data.username)
+    # Find user by username or email.
+    user = get_user_by_email_or_username(form_data.username)
     if not user or not pwd_context.verify(form_data.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect username, email, or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     # Create access token.
@@ -142,7 +162,7 @@ def get_user_info(token: str = Depends(oauth2_scheme)):
     user = get_user_by_username(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"id": user["id"], "username": user["username"]}
+    return {"id": user["id"], "username": user["username"], "email": user["email"]}
 
 # Model endpoint that receives uploaded files.
 @app.post("/model/upload", tags=["Model Interactions"])

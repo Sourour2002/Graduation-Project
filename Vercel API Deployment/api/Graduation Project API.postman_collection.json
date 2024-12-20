@@ -1,0 +1,180 @@
+{
+	"info": {
+		"_postman_id": "8ce466f1-8f99-432f-bbfd-1a3c6225e2a8",
+		"name": "Graduation Project API",
+		"description": "This collection goes over the API endpoints, how to interact with them, and finally how to implment requests using JS fetch function.\n\nBaseURL:\n\n[https://vercel-api-deployment-iota.vercel.app](https://vercel-api-deployment-iota.vercel.app/)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32780067"
+	},
+	"item": [
+		{
+			"name": "Register/SignUp",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"username\": \"exampleUser\",\r\n  \"email\": \"example@email.com\",\r\n  \"password\": \"password123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{BaseURL}}/auth/register",
+					"host": [
+						"{{BaseURL}}"
+					],
+					"path": [
+						"auth",
+						"register"
+					]
+				},
+				"description": "Handles user registeration; Checks if either username or email is already used by another user if not, hash the password and inserts the user information into the Supabase database's users table.\n\nResponse Example:\n\n``` json\n{\n    \"message\": \"User registered successfully\"\n}\n\n ```\n\nJavaScript Fetch Example:\n\n``` javascript\nfetch('{{baseUrl}}/auth/register', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    username: 'exampleUser',\n    email: 'example@email.com',\n    password: 'password123'\n  })\n})\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Login/SignIn",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "exampleUser",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "password123",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{BaseURL}}/auth/login",
+					"host": [
+						"{{BaseURL}}"
+					],
+					"path": [
+						"auth",
+						"login"
+					]
+				},
+				"description": "Handles user login; Finds user information in the database, if the user exists and the inputted credentials are correct; create an JWT access token for said user, encoding the username and an expiration date into the token.\n\nResponse Example:\n\n``` json\n{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJleGFtcGxlVXNlciIsImV4cCI6MTczNDY2OTEzNX0.-BVnqP7kgNmMb2hEZomMEBped7-fQJVFvYS4s1Eh9wY\",\n    \"token_type\": \"bearer\"\n}\n\n ```\n\nJavaScript Fetch Example:\n\n``` javascript\nfetch('{{baseUrl}}/auth/login', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: new URLSearchParams({\n    username: 'exampleUser',\n    password: 'password123'\n  })\n})\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Verify Token",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{BaseURL}}/auth/verify-token/example_token",
+					"host": [
+						"{{BaseURL}}"
+					],
+					"path": [
+						"auth",
+						"verify-token",
+						"example_token"
+					]
+				},
+				"description": "Verifies if a token is valid and not expired.\n\nResponse Example:\n\n``` json\n{\n    \"details\": \"Token is valid\"\n}\n\n ```\n\nJavaScript Fetch Example:\n\n``` javascript\nfetch('{{baseUrl}}/auth/verify-token/your_jwt_token')\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "User Information",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJleGFtcGxlVXNlciIsImV4cCI6MTczNDY2OTU1MH0.0znhqOagn8D6LRwYZ-H7mY4hYfng_LZkEb9cYvb4Ofs",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{BaseURL}}/users/info",
+					"host": [
+						"{{BaseURL}}"
+					],
+					"path": [
+						"users",
+						"info"
+					]
+				},
+				"description": "Fetches user information based on a JWT access token.\n\nResponse Example:\n\n``` json\n{\n    \"id\": 16,\n    \"username\": \"exampleUser\",\n    \"email\": \"example@email.com\"\n}\n\n ```\n\nJavaScript Fetch Example:\n\n``` javascript\nfetch('{{baseUrl}}/users/info', {\n  method: 'GET',\n  headers: {\n    'Authorization': 'Bearer ' + '{{token}}'\n  }\n})\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Voice Recording Model Upload",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": []
+						}
+					]
+				},
+				"url": {
+					"raw": "{{BaseURL}}/model/upload",
+					"host": [
+						"{{BaseURL}}"
+					],
+					"path": [
+						"model",
+						"upload"
+					]
+				},
+				"description": "**!!! Work In Progress !!!**\n\nReceives WAV voice file to pass onto the AI model and returns the results.\n\nResponse Example:\n\n``` json\n{\n    \"details\": \"File uploaded successfully\",\n    \"filename\": \"Sourour(7).wav\"\n}\n\n ```\n\nJavaScript Fetch Example:\n\n``` javascript\nconst formData = new FormData();\nformData.append('file', fileInput.files[0]); // Replace `fileInput` with your file input element\n\nfetch('http://localhost:8000/model/upload', {\n  method: 'POST',\n  body: formData\n})\n  .then(response => response.json())\n  .then(data => console.log('Success:', data))\n  .catch(error => console.error('Error:', error));\n\n ```"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "BaseURL",
+			"value": "https://vercel-api-deployment-iota.vercel.app",
+			"type": "default"
+		}
+	]
+}
