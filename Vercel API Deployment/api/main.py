@@ -126,7 +126,13 @@ def register_user(user: UserCreate):
     }).execute()
     if not response:
         raise HTTPException(status_code=500, detail="Failed to register user")
-    return {"message": "User registered successfully"}
+    
+    # Create access token.
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"message": "User registered successfully", "access_token": access_token, "token_type": "bearer"}
 
 # Auth endpoint for logging in an existing user.
 @app.post("/auth/login", tags=["Authentication"])
