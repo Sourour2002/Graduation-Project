@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model # type: ignore
 import speech_recognition as speech
 import numpy as np
 import librosa
