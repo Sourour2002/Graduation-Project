@@ -9,7 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from tensorflow.keras.models import load_model
+import speech_recognition as speech
+import numpy as np
+import librosa
+import json
 import os
+import io
 
 # FastAPI documentation formatting and organization. 
 tags_metadata = [
@@ -66,6 +72,13 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str
+    
+# Loading AI model.
+model = load_model("D:/University Files/Graduation Project/Vercel API Deployment/api/my_model.h5")
+
+# Loading all quran verses.
+with open("D:/University Files/Graduation Project/Vercel API Deployment/api/quran_verses.json", "r", encoding="utf-8") as file:
+    quran_verses = json.load(file)
 
 # Helper function to create an access token.
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -174,13 +187,74 @@ def get_user_info(token: str = Depends(oauth2_scheme)):
 @app.post("/model/upload", tags=["Model Interactions"])
 async def upload_audio(file: UploadFile = File(...)):
     try:
-        ##
-        #   Model Logic
-        ##
-        # Storing file for now...
         file_data = await file.read()
-        response = supabase.storage.from_("Model-Uploads").upload(file.filename, file_data)
-        return JSONResponse(content={"details": "File uploaded successfully", 
-                                     "filename": file.filename})
+        file_like = io.BytesIO(file_data)
+        
+        shape0, max_shape1 = 13, 1499, 
+        signal, sr =librosa.load(file_like,sr=22050)
+        mfcc = librosa.feature.mfcc(y=signal,
+                            sr=sr,
+                            n_fft=2048,
+                            n_mfcc=13,
+                            hop_length=512)
+        
+        arr = np.zeros((shape0, max_shape1))
+        mfcc_length = mfcc.shape[1]
+        
+        if mfcc_length < max_shape1:
+            arr[:, :mfcc_length] = mfcc
+        else:
+            arr = mfcc[:, :max_shape1]
+
+        mfcc = arr.T
+        mfcc = mfcc[..., np.newaxis]
+        x = mfcc[np.newaxis,...]
+        prediction = model.predict(x)
+        index = np.argmax(prediction,axis=1)
+        index = (index.tolist() if isinstance(index, np.ndarray) else int(index))[0]
+        
+        recording_transcript = []
+        
+        file_like.seek(0)
+        recognizer = speech.Recognizer()
+        with speech.AudioFile(file_like) as source:
+            audio = recognizer.record(source)
+        
+        try:
+            transcript = recognizer.recognize_google(audio, language="ar-SA")
+
+            recording_transcript.append(transcript)
+            recording_transcript = "".join(recording_transcript).strip().split()
+        except speech.UnknownValueError:
+            return JSONResponse(content={"error": "Could not understand the audio"}, status_code=500)
+        except speech.RequestError as e:
+             return JSONResponse(content={"error": f"Google Speech Recognition error: {e}"}, status_code=500)
+        
+        quran_reference = quran_verses["1"]["arabic2"][index]
+        incorrect_words_index_list = []
+        
+        if len(quran_reference) != len(recording_transcript):
+            correction_status = "Incorrect Recitation"
+        else:
+            if quran_reference == recording_transcript:
+                correction_status = "Correct Recitation"
+            else:
+                set1 = set(quran_reference)
+                set2 = set(recording_transcript)
+                if set1 == set2:
+                    correction_status = "The words are recited correctly, but in different order."
+                else:
+                    correction_status = "Incorrect Recitation (Words)"
+                    for i in range(len(quran_reference)):
+                        if quran_reference[i] != recording_transcript[i]:
+                            incorrect_words_index_list.append(i + 1)
+        
+        return JSONResponse(content={
+            "surah_number": 1,
+            "verse_number": index + 1,
+            "correction_status": correction_status,
+            "incorrect_words_index_list": incorrect_words_index_list,
+            "filename": file.filename})
+        
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
