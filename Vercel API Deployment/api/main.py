@@ -1,18 +1,25 @@
 # Necessary imports.
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from passlib.context import CryptContext
+from pydantic import BaseModel
+from jose import JWTError, jwt
+
+from tensorflow.keras.models import load_model
+from nltk.stem import WordNetLemmatizer
+import speech_recognition as speech
+import tensorflow as tf
+import pickle
+import nltk
+
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from tensorflow.keras.models import load_model # type: ignore
-import speech_recognition as speech
 import numpy as np
 import librosa
+import random
 import json
 import os
 import io
@@ -31,6 +38,10 @@ tags_metadata = [
         "name": "Model Interactions",
         "description": "AI Model interactions with different features. (W.I.P)"
     },
+    {
+        "name": "Chatbots",
+        "description": "Chatbot AI Models for different quran tafsers. (W.I.P)"
+    }
 ]
 
 # Load environment variables from .env file
@@ -62,6 +73,9 @@ app.add_middleware(
 # Password hashing.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Initializing Lemmatizer
+lemmatizer = WordNetLemmatizer()
+
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
@@ -72,13 +86,67 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str
-    
-# Loading AI model.
-model = load_model("D:/University Files/Graduation Project/Vercel API Deployment/api/my_model.h5")
+
+class ChatbotPrompt(BaseModel):
+    prompt: str
+
+# Quran Recitation Model.
+# model = load_model("my_model.h5")
+model = load_model("models/model_without_users.h5")
+
+# Chatbot Models.
+words_al_saadi = pickle.load(open('models/words_al-Saadi.pkl', 'rb')) 
+classes_al_saadi = pickle.load(open('models/classes_al-Saadi.pkl', 'rb'))  
+chatbot_model_al_saadi = load_model('models/chatbot_model_al-Saadi.h5')
+
+words_al_muyassar = pickle.load(open('models/words_al-Muyassar.pkl', 'rb')) 
+classes_al_muyassar = pickle.load(open('models/classes_al-Muyassar.pkl', 'rb'))  
+chatbot_model_al_muyassar = load_model('models/chatbot_model_al-Muyassar.h5')
+
+# Chatbot JSON data.
+with open('models/Tafser al-Saadi.json', encoding='utf-8') as f:
+    Tafser_al_Saadi = json.load(f)
+
+with open('models/Tafser al-Muyassar.json', encoding='utf-8') as f:
+    Tafser_al_Muyassar = json.load(f)
 
 # Loading all quran verses.
-with open("D:/University Files/Graduation Project/Vercel API Deployment/api/quran_verses.json", "r", encoding="utf-8") as file:
+with open("quran_verses.json", "r", encoding="utf-8") as file:
     quran_verses = json.load(file)
+
+# Chatbot helper functions.
+def clean_up_sentence(sentence):
+    sentence_words = nltk.word_tokenize(sentence)
+    sentence_words = [lemmatizer.lemmatize(word) for word in sentence_words]
+    return sentence_words
+
+def bag_of_words(sentence, words):
+    sentence_words = clean_up_sentence(sentence)
+    bag = [0] * len(words)
+    for w in sentence_words:
+        for i, word in enumerate(words):
+            if word == w:
+                bag[i] = 1
+    return np.array(bag)
+
+def predict_class(sentence, words, classes, model):
+    bow = bag_of_words(sentence, words)
+    res = model.predict(np.array([bow]))[0]
+    ERROR_THRESHOLD = 0.25
+    results = [[i, r] for i, r in enumerate(res) if r > ERROR_THRESHOLD]
+    results.sort(key=lambda x: x[1], reverse=True)
+    return_list = [{'sura': classes[r[0]], 'probability': str(r[1])} for r in results]
+    return return_list
+
+def get_response(sura_list, sura_json):
+    if not sura_list:
+        return "Sorry, I don't understand."
+    
+    aya = sura_list[0]['sura']
+    for i in sura_json['sura']:
+        if i['aya'] == aya:
+            return random.choice(i['responses'])
+    return "No matching response found."
 
 # Helper function to create an access token.
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -183,7 +251,7 @@ def get_user_info(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=404, detail="User not found")
     return {"id": user["id"], "username": user["username"], "email": user["email"]}
 
-# Model endpoint that receives uploaded files.
+# Model endpoint that receives audio file and pass it to the audio AI model returning the results.
 @app.post("/model/upload", tags=["Model Interactions"])
 async def upload_audio(file: UploadFile = File(...)):
     try:
@@ -256,5 +324,29 @@ async def upload_audio(file: UploadFile = File(...)):
             "incorrect_words_index_list": incorrect_words_index_list,
             "filename": file.filename})
         
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# Tafser al-Saadi chatbot interaction endpoint.
+@app.post("/chatbot/Tafser-al-Saadi", tags=["Chatbots"])
+def chatbot_tafser_al_saadi(chatbot_prompt: ChatbotPrompt):
+    try:
+        model_output = predict_class(chatbot_prompt.prompt, words_al_saadi, classes_al_saadi, chatbot_model_al_saadi)
+        response = get_response(model_output, Tafser_al_Saadi)
+        
+        return JSONResponse(content={"response": response})
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# Tafser al-Muyassar chatbot interaction endpoint.
+@app.post("/chatbot/Tafser-al-Muyassar", tags=["Chatbots"])
+def chatbot_tafser_al_muyassar(chatbot_prompt: ChatbotPrompt):
+    try:
+        model_output = predict_class(chatbot_prompt.prompt, words_al_muyassar, classes_al_muyassar, chatbot_model_al_muyassar)
+        response = get_response(model_output, Tafser_al_Muyassar)
+        
+        return JSONResponse(content={"response": response})
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)

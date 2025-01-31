@@ -8,3 +8,7 @@ uvicorn
 passlib
 supabase
 python-dotenv
+tensorflow
+speechrecognition
+numpy
+librosa
